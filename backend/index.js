@@ -12,6 +12,7 @@ import socialMediaRoutes from './routes/socialMedia.js';
 import resourceRoutes from './routes/resources.js';
 import officialUpdatesRoute from './routes/officialUpdates.js';
 import verifyImageRoute from './routes/verifyImage.js';
+import disastersRoute from './routes/disasters.js';
 
 
 dotenv.config();
@@ -34,6 +35,8 @@ app.use('/disasters', socialMediaRoutes);
 app.use('/resources', resourceRoutes);
 app.use('/official-updates', officialUpdatesRoute);
 app.use('/verify-image', verifyImageRoute);
+app.use('/all-disasters', disastersRoute);
+
 
 
 
