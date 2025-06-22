@@ -17,6 +17,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 router.post('/:reportId', async (req, res) => {
   const { reportId } = req.params;
 
+  // 1. Fetch image_url for the report
   const { data: report, error: fetchError } = await supabase
     .from('reports')
     .select('id, image_url')
@@ -27,7 +28,18 @@ router.post('/:reportId', async (req, res) => {
     return res.status(404).json({ error: 'Report not found' });
   }
 
-  const prompt = `Analyze this image for signs of manipulation or disaster context: ${report.image_url}`;
+  // 2. Send explicit classification prompt to Gemini
+  const prompt = `
+You are an expert in verifying authenticity of images.
+Given the image URL below, classify the image strictly as one of the following categories:
+- real
+- possibly-fake
+- ai-generated
+- unclear
+
+Only respond with a single word: real, possibly-fake, ai-generated, or unclear.
+Image URL: ${report.image_url}
+`;
 
   try {
     const geminiRes = await axios.post(
@@ -43,28 +55,30 @@ router.post('/:reportId', async (req, res) => {
       }
     );
 
-    const text = geminiRes.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (!text) {
-      return res.status(500).json({ error: 'No analysis result from Gemini' });
-    }
+    const raw = geminiRes.data?.candidates?.[0]?.content?.parts?.[0]?.text?.toLowerCase().trim();
+    console.log("🔍 Gemini raw response:", raw);
 
-    let verdict = 'inconclusive';
-    if (/flood|disaster|emergency/i.test(text)) verdict = 'likely-real';
-    if (/fake|manipulat|edited/i.test(text)) verdict = 'possibly-fake';
+    const allowed = ['real', 'possibly-fake', 'ai-generated', 'unclear'];
+    const verdict = allowed.includes(raw) ? raw : 'unclear';
 
+    // 3. Update Supabase
     const { error: updateError } = await supabase
       .from('reports')
       .update({ verification_status: verdict })
       .eq('id', reportId);
 
     if (updateError) {
-      return res.status(500).json({ error: 'Failed to update report status' });
+      return res.status(500).json({ error: 'Failed to update verification status' });
     }
 
-    res.json({ report_id: reportId, verdict, analysis: text });
+    res.json({
+      report_id: reportId,
+      verdict,
+      analysis: raw,
+    });
   } catch (err) {
-    console.error('Gemini error:', err.message);
-    res.status(500).json({ error: 'Gemini verification failed' });
+    console.error('❌ Gemini verification error:', err.message);
+    res.status(500).json({ error: 'Image verification failed' });
   }
 });
 

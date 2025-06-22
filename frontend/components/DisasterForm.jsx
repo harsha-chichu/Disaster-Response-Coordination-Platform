@@ -1,108 +1,95 @@
 'use client';
 import { useState } from 'react';
-import supabase from '@/lib/supabaseClient';
 
-export default function DisasterForm() {
+export default function DisasterForm({ disasterId }) {
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    latitude: '',
-    longitude: '',
+    user_id: '',
+    content: '',
+    image_url: '',
   });
-
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
-  setMessage(null);
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
 
-  const { title, description, latitude, longitude } = formData;
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/reports`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, disaster_id: disasterId }),
+      });
 
-  const lat = parseFloat(latitude);
-  const lng = parseFloat(longitude);
+      const data = await res.json();
 
-  if (isNaN(lat) || isNaN(lng)) {
-    setMessage({ type: 'error', text: 'Invalid coordinates.' });
+      if (!res.ok) throw new Error(data.error || 'Failed to submit report');
+
+      // Auto-trigger image verification
+      if (formData.image_url) {
+        const verifyRes = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/verify-image/${data.id}`,
+          { method: 'POST' }
+        );
+        const verifyData = await verifyRes.json();
+        console.log('✅ Verification Result:', verifyData);
+      }
+
+      setMessage({ type: 'success', text: 'Report submitted and verification triggered!' });
+      setFormData({ user_id: '', content: '', image_url: '' });
+    } catch (err) {
+      console.error(err);
+      setMessage({ type: 'error', text: err.message });
+    }
+
     setLoading(false);
-    return;
-  }
-
-  const { error } = await supabase.from('disasters').insert([
-    {
-      title,
-      description,
-      location: `SRID=4326;POINT(${lng} ${lat})`, // WKT format: POINT(longitude latitude)
-    },
-  ]);
-
-  if (error) {
-    setMessage({ type: 'error', text: error.message });
-  } else {
-    setMessage({ type: 'success', text: 'Disaster added successfully!' });
-    setFormData({ title: '', description: '', latitude: '', longitude: '' });
-  }
-
-  setLoading(false);
- };
-
+  };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4 p-4 border rounded shadow">
       <input
-        name="title"
-        placeholder="Disaster Title"
-        value={formData.title}
+        name="user_id"
+        placeholder="Your Username"
+        value={formData.user_id}
         onChange={handleChange}
         required
-        className="w-full border border-gray-300 p-2 rounded"
+        className="w-full p-2 border rounded"
       />
       <textarea
-        name="description"
-        placeholder="Description"
-        value={formData.description}
+        name="content"
+        placeholder="Report content"
+        value={formData.content}
         onChange={handleChange}
         required
-        className="w-full border border-gray-300 p-2 rounded"
+        className="w-full p-2 border rounded"
       />
       <input
-        name="latitude"
-        placeholder="Latitude"
-        value={formData.latitude}
+        name="image_url"
+        placeholder="Image URL (optional)"
+        value={formData.image_url}
         onChange={handleChange}
-        required
-        type="number"
-        className="w-full border border-gray-300 p-2 rounded"
-      />
-      <input
-        name="longitude"
-        placeholder="Longitude"
-        value={formData.longitude}
-        onChange={handleChange}
-        required
-        type="number"
-        className="w-full border border-gray-300 p-2 rounded"
+        className="w-full p-2 border rounded"
       />
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition"
+        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
       >
-        {loading ? 'Submitting...' : 'Submit Disaster'}
+        {loading ? 'Submitting...' : 'Submit Report'}
       </button>
       {message && (
-        <div
+        <p
           className={`text-sm p-2 rounded ${
             message.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
           }`}
         >
           {message.text}
-        </div>
+        </p>
       )}
     </form>
   );

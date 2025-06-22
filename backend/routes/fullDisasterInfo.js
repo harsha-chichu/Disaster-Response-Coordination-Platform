@@ -1,3 +1,4 @@
+// routes/fullDisasterInfo.js
 import express from 'express';
 import axios from 'axios';
 import dotenv from 'dotenv';
@@ -16,6 +17,7 @@ const supabase = createClient(
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const MAPBOX_API_KEY = process.env.MAPBOX_API_KEY;
 
+// POST /disasters/full - Create new disaster
 router.post('/', async (req, res) => {
   const { title, description } = req.body;
   if (!title || !description) {
@@ -61,12 +63,12 @@ router.post('/', async (req, res) => {
     }
 
     // 3. Insert into Supabase
-    const { error: insertError } = await supabase.from('disasters').insert({
+    const { data, error: insertError } = await supabase.from('disasters').insert({
       title,
       description,
       location_name,
       location: `POINT(${lon} ${lat})`,
-    });
+    }).select().single();
 
     if (insertError) {
       console.error('Supabase insert error:', insertError.message);
@@ -79,11 +81,35 @@ router.post('/', async (req, res) => {
       description,
       location_name,
       coordinates: { lat, lon },
+      id: data.id
     });
   } catch (err) {
     console.error('Error:', err.message);
     res.status(500).json({ error: 'Internal error occurred' });
   }
 });
+
+// GET /disasters/full/:id - Fetch full disaster details
+router.get('/full/:id', async (req, res) => {
+  const { id } = req.params;
+
+  const { data, error } = await supabase
+    .from('disasters')
+    .select(`
+      *,
+      resources(*),
+      reports(*)
+    `)
+    .eq('id', id)
+    .single();
+
+  if (error || !data) {
+    console.error('❌ Disaster fetch error:', error?.message);
+    return res.status(404).json({ error: 'Disaster not found' });
+  }
+
+  res.json(data);
+});
+
 
 export default router;
